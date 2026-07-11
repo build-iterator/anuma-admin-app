@@ -1,6 +1,22 @@
 import { Suspense, lazy } from "react";
-import { Route, Routes } from "react-router";
+import { Route, Routes, matchPath, useLocation } from "react-router";
 import MainLayout from "@/layouts/main-layout";
+
+// Tab titles follow `Location | Anuma Admin`. React 19 hoists the bare
+// <title> element into <head>.
+const TITLES = [
+  { path: "/", end: true, title: "Dashboard" },
+  { path: "/merchants/:id", title: "Merchant detail" },
+  { path: "/merchants", title: "Merchants" },
+];
+
+function RouteTitle() {
+  const { pathname } = useLocation();
+  const match = TITLES.find((t) =>
+    matchPath({ path: t.path, end: t.end ?? false }, pathname)
+  );
+  return <title>{match ? `${match.title} | Anuma Admin` : "Anuma Admin"}</title>;
+}
 
 const DashboardPage = lazy(() => import("@/pages/dashboard/index"));
 const MerchantsPage = lazy(() => import("@/pages/merchants/index"));
@@ -16,8 +32,10 @@ function Loading() {
 
 export default function Router() {
   return (
-    <Routes>
-      <Route element={<MainLayout />}>
+    <>
+      <RouteTitle />
+      <Routes>
+        <Route element={<MainLayout />}>
         <Route
           path="/"
           element={
@@ -42,7 +60,8 @@ export default function Router() {
             </Suspense>
           }
         />
-      </Route>
-    </Routes>
+        </Route>
+      </Routes>
+    </>
   );
 }
