@@ -54,7 +54,7 @@ function ActionCell({ data }) {
         size="xs"
         className="h-6 text-xs"
         onClick={() => {
-          const ssoUrl = `https://app.toufah.com/sso?merchant_id=${data.id}&redirect=/dashboard`;
+          const ssoUrl = `https://app.anuma.com/sso?merchant_id=${data.id}&redirect=/dashboard`;
           window.open(ssoUrl, "_blank", "noopener,noreferrer");
         }}
       >

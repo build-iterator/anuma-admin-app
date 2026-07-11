@@ -35,7 +35,7 @@ export default function MerchantDetail() {
   const statusMeta = STATUS_META[merchant.status] ?? STATUS_META.inactive;
   const planMeta = PLAN_META[merchant.plan] ?? PLAN_META.Basic;
 
-  const ssoUrl = `https://app.toufah.com/sso?merchant_id=${merchant.id}&redirect=/dashboard`;
+  const ssoUrl = `https://app.anuma.com/sso?merchant_id=${merchant.id}&redirect=/dashboard`;
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
