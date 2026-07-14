@@ -1,32 +1,20 @@
-import { LayoutDashboard, Store } from "lucide-react";
+import { Database, LayoutDashboard, ListTodo, Store } from "lucide-react";
 
-export const NAV_GROUPS = [
-  {
-    label: null,
-    items: [
-      { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, url: "/" },
-    ],
-  },
-  {
-    label: "Management",
-    items: [
-      { key: "merchants", label: "Merchants", icon: Store, url: "/merchants", matchPrefix: "/merchants" },
-    ],
-  },
+// The admin rail — the three-tier IA: Leads (generated lists, disposable,
+// outbound-first), Records (the durable companies + contacts graph, derived),
+// Tenants (who has infra with us). Leads and Records carry sub-nav columns.
+export const SECTIONS = [
+  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, to: "/" },
+  { key: "leads", label: "Leads", icon: ListTodo, to: "/leads" },
+  { key: "records", label: "Records", icon: Database, to: "/records/companies" },
+  { key: "tenants", label: "Tenants", icon: Store, to: "/tenants" },
 ];
 
-export const NAV_FOOTER = [];
-
-export const NAV_ALL = [...NAV_GROUPS.flatMap((g) => g.items), ...NAV_FOOTER];
-
-export function isItemActive(item, pathname) {
-  if (!item.url) return false;
-  if (item.matchPrefix) {
-    return (
-      pathname === item.matchPrefix ||
-      pathname.startsWith(item.matchPrefix + "/")
-    );
-  }
-  if (item.url === "/") return pathname === "/";
-  return pathname === item.url || pathname.startsWith(item.url + "/");
+export function sectionFor(pathname) {
+  if (pathname.startsWith("/leads")) return SECTIONS.find((s) => s.key === "leads");
+  if (pathname.startsWith("/records")) return SECTIONS.find((s) => s.key === "records");
+  if (pathname.startsWith("/tenants") || pathname.startsWith("/merchants"))
+    return SECTIONS.find((s) => s.key === "tenants");
+  if (pathname === "/") return SECTIONS.find((s) => s.key === "dashboard");
+  return null;
 }

@@ -46,7 +46,7 @@ function ActionCell({ data }) {
         size="xs"
         variant="outline"
         className="h-6 text-xs"
-        onClick={() => navigate(`/merchants/${data.id}`)}
+        onClick={() => navigate(`/tenants/${data.id}`)}
       >
         View
       </Button>
@@ -163,19 +163,19 @@ export default function MerchantsPage() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="os-enter mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Merchants</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Tenants</h1>
           <p className="text-sm text-muted-foreground">
-            {MERCHANTS.length} merchants registered
+            {MERCHANTS.length} tenants on Anuma infrastructure
           </p>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <Input
-          placeholder="Search merchants..."
+          placeholder="Search tenants..."
           value={quickFilter}
           onChange={onFilterTextChange}
           className="h-8 w-64 text-sm"

@@ -25,7 +25,7 @@ export default function MerchantDetail() {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-24 text-muted-foreground">
         <p className="text-sm">Merchant not found.</p>
-        <Button variant="outline" size="sm" onClick={() => navigate("/merchants")}>
+        <Button variant="outline" size="sm" onClick={() => navigate("/tenants")}>
           Back to Merchants
         </Button>
       </div>
@@ -38,13 +38,13 @@ export default function MerchantDetail() {
   const ssoUrl = `https://app.anuma.com/sso?merchant_id=${merchant.id}&redirect=/dashboard`;
 
   return (
-    <div className="flex flex-col gap-6 max-w-3xl">
+    <div className="os-enter mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => navigate("/merchants")}
+          onClick={() => navigate("/tenants")}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
