@@ -10,7 +10,8 @@ import "ag-grid-community/styles/ag-theme-quartz.css";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MERCHANTS, STATUS_META, PLAN_META } from "@/pages/merchants/data";
+import { STATUS_META, PLAN_META } from "@/pages/merchants/data";
+import { useGetTenantsQuery } from "@/api/services/tenants";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -67,6 +68,8 @@ function ActionCell({ data }) {
 export default function MerchantsPage() {
   const gridRef = useRef(null);
   const [quickFilter, setQuickFilter] = useState("");
+  const { data, isLoading, isError } = useGetTenantsQuery();
+  const rows = data?.results ?? [];
 
   const columnDefs = useMemo(
     () => [
@@ -118,7 +121,7 @@ export default function MerchantsPage() {
         width: 120,
         type: "numericColumn",
         cellStyle: { textAlign: "right" },
-        valueFormatter: (p) => p.value.toLocaleString(),
+        valueFormatter: (p) => Number(p.value ?? 0).toLocaleString(),
       },
       {
         field: "gmv",
@@ -126,8 +129,11 @@ export default function MerchantsPage() {
         width: 130,
         type: "numericColumn",
         cellStyle: { textAlign: "right" },
+        // DRF DecimalField serializes as a string ("48200.00"); coerce.
         valueFormatter: (p) =>
-          p.value.toLocaleString("en-IN", { maximumFractionDigits: 0 }),
+          Number(p.value ?? 0).toLocaleString("en-IN", {
+            maximumFractionDigits: 0,
+          }),
       },
       {
         field: "joined_date",
@@ -168,7 +174,11 @@ export default function MerchantsPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Tenants</h1>
           <p className="text-sm text-muted-foreground">
-            {MERCHANTS.length} tenants on Anuma infrastructure
+            {isLoading
+              ? "Loading tenants…"
+              : isError
+                ? "Failed to load tenants"
+                : `${rows.length} tenants on Anuma infrastructure`}
           </p>
         </div>
       </div>
@@ -188,7 +198,7 @@ export default function MerchantsPage() {
       >
         <AgGridReact
           ref={gridRef}
-          rowData={MERCHANTS}
+          rowData={rows}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           quickFilterText={quickFilter}

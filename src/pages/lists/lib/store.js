@@ -1,29 +1,40 @@
-// Lists store — checked-in seeds plus a localStorage overlay. Frontend-only:
-// every mutation (imports, edits, new lists, saved views) lands in
-// localStorage; seeds stay pristine. This module is the only thing that
-// touches storage, so swapping its internals for API calls later leaves every
-// page above it unchanged.
+// Lists store — thin adapter between the RTK Query `leadsApi` cache and the
+// synchronous getter surface the pages/components already use. The sync API
+// is preserved so existing consumers keep working: getters read from the RTK
+// Query cache via store.getState(), mutations dispatch RTK Query mutations
+// (fire-and-forget with cache invalidation), and useListsVersion() rerenders
+// on any leadsApi state change.
 //
-// Reactivity: mutations bump a version and notify subscribers; components read
-// through useListsVersion() (useSyncExternalStore) so the rail sub-nav and
-// pages re-render when a list is added or a view is saved.
+// A separate <LeadsHydrator /> component (mounted from routes/index.jsx)
+// primes the queries — otherwise the RTK Query cache would be empty on first
+// read and consumers would see "no lists yet" until React tries again.
+//
+// Icons/select-option colors for the 3 built-in lists still live in
+// registry.js since they don't survive a JSON round-trip. Backend data is
+// merged with the registry entry to produce the final list object.
 
 import { useSyncExternalStore } from "react";
 
+import { store } from "@/api/store";
+import { leadsApi } from "@/api/services/leads";
 import { LISTS, makeCustomList } from "@/pages/lists/registry";
-
-const PREFIX = "anuma-admin:lists:";
-const CUSTOM_KEY = `${PREFIX}custom`;
 
 /* ── reactivity ─────────────────────────────────────────────────────────── */
 
+// Bump a monotonic counter whenever leadsApi state changes so components using
+// useListsVersion re-render when queries resolve or mutations invalidate.
 let version = 0;
+let lastSlice;
 const subscribers = new Set();
 
-function notify() {
-  version += 1;
-  subscribers.forEach((fn) => fn());
-}
+store.subscribe(() => {
+  const slice = store.getState()[leadsApi.reducerPath];
+  if (slice !== lastSlice) {
+    lastSlice = slice;
+    version += 1;
+    subscribers.forEach((fn) => fn());
+  }
+});
 
 export function useListsVersion() {
   return useSyncExternalStore(
@@ -35,141 +46,175 @@ export function useListsVersion() {
   );
 }
 
-/* ── storage helpers ────────────────────────────────────────────────────── */
+/* ── selectors over the RTK Query cache ─────────────────────────────────── */
 
-function read(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
+// Read the resolved data for a query by args. RTK Query keeps entries under
+// `<endpointName>(<serialized-args>)` with a `data` field once resolved.
+// Paginated list endpoints return `{count, next, previous, results}` — this
+// helper unwraps `.results` for consumers that only want the array. Direct
+// hook consumers can still read the envelope via `useGetListsQuery()` etc.
+function readQuery(endpoint, args) {
+  const state = store.getState()[leadsApi.reducerPath];
+  const selector = leadsApi.endpoints[endpoint].select(args);
+  const data = selector({ [leadsApi.reducerPath]: state }).data;
+  if (data && Array.isArray(data.results)) return data.results;
+  return data;
+}
+
+/* ── lists (backend + registry schema merge) ────────────────────────────── */
+
+const REGISTRY_BY_ID = new Map(LISTS.map((l) => [l.id, l]));
+
+// Merge a backend list row with the frontend registry entry (schema + icon
+// live in the registry for built-ins). Custom lists synthesize their schema
+// via makeCustomList using the extra_fields the backend stored.
+function toClientList(row) {
+  if (!row.is_custom) {
+    const base = REGISTRY_BY_ID.get(row.slug);
+    if (base) return { ...base, id: row.slug, description: row.description || base.description, recordCount: row.record_count ?? 0 };
+    // Built-in row we don't know about — fall through to a generic shell.
   }
+  const custom = makeCustomList({
+    id: row.slug,
+    name: row.name,
+    description: row.description,
+    extraFields: row.extra_fields || [],
+  });
+  return { ...custom, id: row.slug, recordCount: row.record_count ?? 0 };
 }
-
-function write(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-  notify();
-}
-
-/* ── lists (registry + custom) ──────────────────────────────────────────── */
 
 export function getAllLists() {
-  const custom = read(CUSTOM_KEY, []);
-  return [...LISTS, ...custom.map(makeCustomList)];
+  const rows = readQuery("getLists") || [];
+  return rows.map(toClientList);
 }
 
 export function getList(listId) {
   return getAllLists().find((l) => l.id === listId) ?? null;
 }
 
-export function addList({ name, description, extraFields = [] }) {
-  const custom = read(CUSTOM_KEY, []);
+export async function addList({ name, description, extraFields = [] }) {
+  // Slugify locally so the backend URL keys stay predictable.
   const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "list";
   const taken = new Set(getAllLists().map((l) => l.id));
-  let id = base;
-  for (let n = 2; taken.has(id); n += 1) id = `${base}-${n}`;
-  custom.push({ id, name: name.trim(), description: description?.trim() || "", extraFields });
-  write(CUSTOM_KEY, custom);
-  return id;
+  let slug = base;
+  for (let n = 2; taken.has(slug); n += 1) slug = `${base}-${n}`;
+  await store
+    .dispatch(
+      leadsApi.endpoints.createList.initiate({
+        slug,
+        name: name.trim(),
+        description: description?.trim() || "",
+        extra_fields: extraFields,
+        stage_field: "stage",
+      }),
+    )
+    .unwrap();
+  return slug;
 }
 
 /* ── records ────────────────────────────────────────────────────────────── */
-// Overlay shape per list: { added: Record[], updated: { [id]: values-patch } }
-
-function overlayKey(listId) {
-  return `${PREFIX}${listId}`;
-}
-
-function readOverlay(listId) {
-  const parsed = read(overlayKey(listId), null);
-  return {
-    added: Array.isArray(parsed?.added) ? parsed.added : [],
-    updated: parsed?.updated && typeof parsed.updated === "object" ? parsed.updated : {},
-  };
-}
 
 export function getRecords(listId) {
-  const list = getList(listId);
-  if (!list) return [];
-  const overlay = readOverlay(listId);
-  const merge = (record) => ({
-    ...record,
-    values: { ...record.values, ...(overlay.updated[record.id] ?? {}) },
-  });
-  return [...list.seed.map(merge), ...overlay.added.map(merge)];
+  const rows = readQuery("getRecords", listId) || [];
+  // Preserve the source string so record-panel timeline entries keep working.
+  return rows.map((r) => ({ id: r.id, values: r.values || {}, source: r.source || "" }));
 }
 
 export function updateRecord(listId, recordId, patch) {
-  const overlay = readOverlay(listId);
-  overlay.updated[recordId] = { ...(overlay.updated[recordId] ?? {}), ...patch };
-  write(overlayKey(listId), overlay);
+  return store
+    .dispatch(
+      leadsApi.endpoints.updateRecord.initiate({
+        slug: listId,
+        rid: recordId,
+        values: patch,
+      }),
+    )
+    .unwrap();
 }
 
 export function addRecord(listId, values) {
-  const overlay = readOverlay(listId);
-  const id = `${listId}-rec-${Date.now().toString(36)}`;
-  overlay.added.push({ id, values, source: "added manually" });
-  write(overlayKey(listId), overlay);
-  return id;
+  return store
+    .dispatch(
+      leadsApi.endpoints.createRecord.initiate({
+        slug: listId,
+        values,
+        source: "added manually",
+      }),
+    )
+    .unwrap()
+    .then((row) => row.id);
 }
 
 export function importRecords(listId, rows, source = "csv import") {
-  const overlay = readOverlay(listId);
-  const start = overlay.added.length;
-  overlay.added.push(
-    ...rows.map((values, i) => ({
-      id: `${listId}-import-${start + i + 1}`,
-      values,
-      source,
-    })),
-  );
-  write(overlayKey(listId), overlay);
+  return store
+    .dispatch(
+      leadsApi.endpoints.importRecords.initiate({
+        slug: listId,
+        rows: rows.map((values) => ({ values })),
+        source,
+      }),
+    )
+    .unwrap();
 }
 
 /* ── saved views ────────────────────────────────────────────────────────── */
-// A saved view captures the whole lens: segment + filters + search + view mode.
-
-function viewsKey(listId) {
-  return `${PREFIX}views:${listId}`;
-}
 
 export function getSavedViews(listId) {
-  return read(viewsKey(listId), []);
+  return readQuery("getSavedViews", listId) || [];
 }
 
 export function saveView(listId, { name, segment, filters, q, view }) {
-  const views = getSavedViews(listId);
-  const id = `view-${Date.now().toString(36)}`;
-  views.push({ id, name: name.trim(), segment, filters, q, view });
-  write(viewsKey(listId), views);
-  return id;
+  return store
+    .dispatch(
+      leadsApi.endpoints.saveView.initiate({
+        slug: listId,
+        name,
+        segment,
+        filters,
+        q,
+        view,
+      }),
+    )
+    .unwrap()
+    .then((row) => row.id);
 }
 
 export function deleteView(listId, viewId) {
-  write(viewsKey(listId), getSavedViews(listId).filter((v) => v.id !== viewId));
+  return store
+    .dispatch(leadsApi.endpoints.deleteView.initiate({ slug: listId, vid: viewId }))
+    .unwrap();
 }
 
 /* ── event log ──────────────────────────────────────────────────────────── */
-// Human-logged timeline entries per record: { [recordId]: [{at, text, type}] }
-
-function eventsKey(listId) {
-  return `${PREFIX}events:${listId}`;
-}
 
 export function getLoggedEvents(listId, recordId) {
-  const all = read(eventsKey(listId), {});
-  return all[recordId] ?? [];
+  const rows = readQuery("getRecordEvents", { slug: listId, rid: recordId }) || [];
+  // Keep the frontend's { at, text, type } shape.
+  return rows.map((e) => ({
+    at: (e.at || "").slice(0, 10),
+    text: e.text,
+    type: e.type || "note",
+  }));
 }
 
 export function logEvent(listId, recordId, text) {
-  const all = read(eventsKey(listId), {});
-  const at = new Date().toISOString().slice(0, 10);
-  all[recordId] = [...(all[recordId] ?? []), { at, text: text.trim(), type: "note" }];
-  write(eventsKey(listId), all);
+  return store
+    .dispatch(
+      leadsApi.endpoints.logRecordEvent.initiate({
+        slug: listId,
+        rid: recordId,
+        text: text.trim(),
+        type: "note",
+      }),
+    )
+    .unwrap();
 }
 
-// Dev/reset affordance: wipes local edits + imports for one list.
+/* ── reset (dev/reset affordance) ───────────────────────────────────────── */
+
 export function resetOverlay(listId) {
-  localStorage.removeItem(overlayKey(listId));
-  notify();
+  // Backend has no per-list reset endpoint; nuke the cache so the next read
+  // refetches from the server (a no-op if the user hasn't imported anything
+  // client-only).
+  store.dispatch(leadsApi.util.invalidateTags([{ type: "Records", id: listId }]));
 }

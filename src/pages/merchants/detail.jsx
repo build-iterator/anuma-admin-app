@@ -1,8 +1,9 @@
-import { useParams, useNavigate, Link } from "react-router";
+import { useParams, useNavigate } from "react-router";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { MERCHANTS, STATUS_META, PLAN_META } from "@/pages/merchants/data";
+import { STATUS_META, PLAN_META } from "@/pages/merchants/data";
+import { useGetTenantQuery } from "@/api/services/tenants";
 
 function Field({ label, value }) {
   return (
@@ -19,9 +20,19 @@ export default function MerchantDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const merchant = MERCHANTS.find((m) => m.id === id);
+  const { data: merchant, isLoading, isError } = useGetTenantQuery(id, {
+    skip: !id,
+  });
 
-  if (!merchant) {
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-24 text-muted-foreground">
+        <p className="text-sm">Loading tenant…</p>
+      </div>
+    );
+  }
+
+  if (isError || !merchant) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-24 text-muted-foreground">
         <p className="text-sm">Merchant not found.</p>
@@ -36,6 +47,11 @@ export default function MerchantDetail() {
   const planMeta = PLAN_META[merchant.plan] ?? PLAN_META.Basic;
 
   const ssoUrl = `https://app.anuma.com/sso?merchant_id=${merchant.id}&redirect=/dashboard`;
+
+  // DRF DecimalField and any missing int come back as strings/undefined; coerce
+  // once so the formatters below stay readable.
+  const monthlyOrders = Number(merchant.monthly_orders ?? 0);
+  const gmv = Number(merchant.gmv ?? 0);
 
   return (
     <div className="os-enter mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 sm:px-6 lg:px-8">
@@ -113,7 +129,7 @@ export default function MerchantDetail() {
               Monthly Orders
             </p>
             <p className="mt-1 text-2xl font-semibold">
-              {merchant.monthly_orders.toLocaleString()}
+              {monthlyOrders.toLocaleString()}
             </p>
           </div>
           <div className="rounded-md bg-muted/40 p-3">
@@ -121,7 +137,7 @@ export default function MerchantDetail() {
               GMV (₹)
             </p>
             <p className="mt-1 text-2xl font-semibold">
-              {merchant.gmv.toLocaleString("en-IN")}
+              {gmv.toLocaleString("en-IN")}
             </p>
           </div>
           <div className="rounded-md bg-muted/40 p-3">

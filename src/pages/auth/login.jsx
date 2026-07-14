@@ -1,23 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { useDispatch } from "react-redux";
 import { ArrowLeft } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { MorseA, MorseSpinner } from "@/components/brand/morse";
+import {
+  useRequestOtpMutation,
+  useVerifyOtpMutation,
+  useGoogleLoginMutation,
+} from "@/api/services/auth";
+import { setAccessToken } from "@/api/slices/authSlice";
+import { resetAllApiState } from "@/api/resetApiState";
 import pkg from "../../../package.json";
 
 const VERSION = `v${pkg.version.split(".").slice(0, 2).join(".")}`;
 
-// Sign-in on the OS frame, same grammar as the merchant app's login: dark
-// #1b1b1b ground with a whisper of the blueprint dot grid and a soft glow
-// behind the card; brand lockup dead center above the card, recovery +
-// version bottom-center.
-//
-// Design surface only — nothing is wired. The plan is Google SSO through the
-// shared teamOS identity service; the email+code path mocks with 000000 so
-// the whole journey can be walked today.
-
-const MOCK_CODE = "000000";
 const RESEND_SECONDS = 30;
 
 const validEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
@@ -42,8 +40,15 @@ const pillButton =
 const darkPill = cn(pillButton, "bg-[#1a1a1a] text-white hover:bg-[#333]");
 const ringPill = cn(pillButton, "bg-white text-[#1a1a1a] ring-1 ring-[#e4e4e7] hover:bg-[#fafafa]");
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
 function SignInFlow({ recoverSignal = 0 }) {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const [requestOtp] = useRequestOtpMutation();
+  const [verifyOtp] = useVerifyOtpMutation();
+  const [googleLogin] = useGoogleLoginMutation();
+  const googleBtnRef = useRef(null);
   const [step, setStep] = useState("method"); // method | code | recover
   const [email, setEmail] = useState("");
   const [fieldError, setFieldError] = useState("");
@@ -71,33 +76,81 @@ function SignInFlow({ recoverSignal = 0 }) {
     return () => clearTimeout(t);
   }, [step, resendIn]);
 
-  const requestCode = () => {
+  // Render Sign in with Google via GIS (loaded from index.html). We wait on
+  // window.google to appear, then swap our styled placeholder for Google's
+  // rendered button so accessibility + PKCE flow stay official.
+  useEffect(() => {
+    if (step !== "method" || !GOOGLE_CLIENT_ID) return undefined;
+    let cancelled = false;
+    const init = () => {
+      if (cancelled) return true;
+      const gsi = window.google?.accounts?.id;
+      if (!gsi || !googleBtnRef.current) return false;
+      gsi.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async ({ credential }) => {
+          try {
+            const { token } = await googleLogin({ credential }).unwrap();
+            resetAllApiState(dispatch);
+            dispatch(setAccessToken(token));
+            navigate("/", { replace: true });
+          } catch (err) {
+            const detail = err?.data?.error;
+            setSsoNote(detail || "Google sign-in failed. Try email instead.");
+          }
+        },
+      });
+      gsi.renderButton(googleBtnRef.current, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "pill",
+        logo_alignment: "left",
+        width: 320,
+      });
+      return true;
+    };
+    if (init()) return () => { cancelled = true; };
+    const iv = setInterval(() => { if (init()) clearInterval(iv); }, 200);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [step, dispatch, googleLogin, navigate]);
+
+  const requestCode = async () => {
     setFieldError("");
     if (!validEmail(email)) {
       setFieldError("Enter a valid work email.");
       return;
     }
     setSending(true);
-    setTimeout(() => {
-      setSending(false);
+    try {
+      await requestOtp({ email }).unwrap();
       setCode("");
       setCodeError(false);
       setResendIn(RESEND_SECONDS);
       setStep("code");
-    }, 450);
+    } catch {
+      setFieldError("Couldn't send the code. Try again.");
+    } finally {
+      setSending(false);
+    }
   };
 
-  const verify = (value) => {
+  const verify = async (value) => {
     setVerifying(true);
-    setTimeout(() => {
-      if (value === MOCK_CODE) {
-        navigate("/", { replace: true });
-      } else {
-        setVerifying(false);
-        setCodeError(true);
-        setCode("");
-      }
-    }, 500);
+    try {
+      const { token } = await verifyOtp({ email, code: value }).unwrap();
+      resetAllApiState(dispatch);
+      dispatch(setAccessToken(token));
+      navigate("/", { replace: true });
+    } catch {
+      setVerifying(false);
+      setCodeError(true);
+      setCode("");
+    }
   };
 
   /* ---------------- recover ---------------- */
@@ -171,10 +224,6 @@ function SignInFlow({ recoverSignal = 0 }) {
           {verifying && <MorseSpinner className="text-[#8a8f98]" />}
         </div>
 
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#8a8f98]/70">
-          DESIGN ONLY · CODE {MOCK_CODE}
-        </p>
-
         <button
           type="button"
           onClick={() => setStep("method")}
@@ -195,13 +244,17 @@ function SignInFlow({ recoverSignal = 0 }) {
       </div>
 
       <div className="grid gap-2.5">
-        <button
-          type="button"
-          className={ringPill}
-          onClick={() => setSsoNote("Google SSO arrives with the shared teamOS identity service.")}
-        >
-          <GoogleMark /> Continue with Google
-        </button>
+        {GOOGLE_CLIENT_ID ? (
+          <div ref={googleBtnRef} className="flex justify-center" />
+        ) : (
+          <button
+            type="button"
+            className={ringPill}
+            onClick={() => setSsoNote("Google SSO client not configured.")}
+          >
+            <GoogleMark /> Continue with Google
+          </button>
+        )}
         {ssoNote && <p className="text-center text-xs text-[#8a8f98]">{ssoNote}</p>}
       </div>
 

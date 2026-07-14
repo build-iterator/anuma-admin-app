@@ -17,6 +17,7 @@ import {
   snooze,
 } from "@/pages/lists/lib/actions";
 import { getLoggedEvents, useListsVersion, logEvent } from "@/pages/lists/lib/store";
+import { useGetRecordEventsQuery } from "@/api/services/leads";
 
 const CONTACT_KEYS = ["contact_name", "contact_role", "phone", "whatsapp", "email", "website", "indiamart_url", "shopify_domain", "city", "state", "cluster"];
 
@@ -199,6 +200,9 @@ function Section({ title, children }) {
 
 function Timeline({ list, record }) {
   const version = useListsVersion();
+  // Hydrate this record's timeline into the RTK Query cache — the sync
+  // getLoggedEvents below reads it back through lib/store.js.
+  useGetRecordEventsQuery({ slug: list.id, rid: record.id });
   const [draft, setDraft] = useState("");
   const events = useMemo(() => {
     const logged = getLoggedEvents(list.id, record.id);
