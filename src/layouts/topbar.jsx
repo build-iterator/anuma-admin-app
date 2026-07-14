@@ -31,7 +31,7 @@ export default function TopBar() {
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col gap-0.5">
                 <p className="text-sm font-medium">Admin User</p>
-                <p className="text-xs text-muted-foreground">admin@toufah.com</p>
+                <p className="text-xs text-muted-foreground">admin@anuma.com</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

@@ -18,7 +18,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { NAV_FOOTER, NAV_GROUPS, isItemActive } from "@/layouts/nav";
 
-const BRAND = { name: "Toufah Admin", initials: "TA" };
+const BRAND = { name: "Anuma Admin", initials: "TA" };
 const USER = { name: "Admin User", role: "Super Admin", initials: "AU" };
 
 function NavItem({ item, active }) {
