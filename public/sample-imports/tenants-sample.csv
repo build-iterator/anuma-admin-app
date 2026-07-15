@@ -1,0 +1,6 @@
+id,business_name,contact_name,email,phone,city,plan,status,joined_date,monthly_orders,gmv
+MCH-101,Salt & Straw,Rohan Mehta,rohan@saltstraw.co,+91 98765 12345,Goa,Pro,active,2025-01-10,540,21500
+MCH-102,Bindu Blends,Ananya Rao,ananya@bindu.in,+91 90000 22222,Bengaluru,Basic,active,2024-11-04,180,7200
+MCH-103,Terra Ceramics,Karthik Iyer,karthik@terraceramics.co,+91 82233 55555,Jaipur,Enterprise,active,2024-06-22,1420,63800
+MCH-104,Amrit Bakes,Simran Kaur,simran@amritbakes.co,+91 87654 33344,Amritsar,Basic,suspended,2025-03-15,60,2400
+MCH-005,The Spice Route,Priya Sharma,priya@spiceroute.com,+91 91234 56789,Delhi,Enterprise,active,2023-07-01,1150,45200

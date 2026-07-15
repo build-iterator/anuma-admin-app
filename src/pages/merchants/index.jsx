@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router";
 import { AgGridReact } from "ag-grid-react";
@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { STATUS_META, PLAN_META } from "@/pages/merchants/data";
 import { tenantsApi, useGetTenantsQuery } from "@/api/services/tenants";
 import Importer from "@/components/Importer/Importer";
+import { usePagination } from "@/hooks/usePagination";
+import { Pagination } from "@/components/Pagination";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -71,10 +73,14 @@ function ActionCell({ data }) {
 export default function MerchantsPage() {
   const gridRef = useRef(null);
   const dispatch = useDispatch();
-  const [quickFilter, setQuickFilter] = useState("");
   const [importerOpen, setImporterOpen] = useState(false);
-  const { data, isLoading, isError } = useGetTenantsQuery();
+
+  // URL-driven pagination + search. `params` is passed to the query as-is —
+  // DRF picks up `?page`, `?limit`, `?search` server-side.
+  const { params, page, limit, search, setPage, setSearch } = usePagination();
+  const { data, isLoading, isError, isFetching } = useGetTenantsQuery(params);
   const rows = data?.results ?? [];
+  const count = data?.count ?? 0;
 
   // Bust the tenants list cache once the wizard reports success so the grid
   // refetches with any newly created / updated rows.
@@ -179,10 +185,6 @@ export default function MerchantsPage() {
     [],
   );
 
-  const onFilterTextChange = useCallback((e) => {
-    setQuickFilter(e.target.value);
-  }, []);
-
   return (
     <div className="os-enter mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center justify-between">
@@ -193,16 +195,21 @@ export default function MerchantsPage() {
               ? "Loading tenants…"
               : isError
                 ? "Failed to load tenants"
-                : `${rows.length} tenants on Anuma infrastructure`}
+                : `${count} tenants on Anuma infrastructure`}
           </p>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <Input
-          placeholder="Search tenants..."
-          value={quickFilter}
-          onChange={onFilterTextChange}
+          placeholder="Search tenants…"
+          defaultValue={search}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") setSearch(e.currentTarget.value);
+          }}
+          onBlur={(e) => {
+            if (e.currentTarget.value !== search) setSearch(e.currentTarget.value);
+          }}
           className="h-8 w-64 text-sm"
         />
         <Button
@@ -217,23 +224,27 @@ export default function MerchantsPage() {
 
       <div
         className="ag-theme-quartz rounded-md border"
-        style={{ height: "calc(100vh - 220px)" }}
+        style={{ height: "calc(100vh - 260px)" }}
       >
         <AgGridReact
           ref={gridRef}
           rowData={rows}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
-          quickFilterText={quickFilter}
           rowHeight={40}
           headerHeight={38}
           animateRows
           suppressCellFocus
-          pagination
-          paginationPageSize={20}
-          paginationPageSizeSelector={[10, 20, 50]}
+          overlayLoadingTemplate={isFetching ? "Loading…" : undefined}
         />
       </div>
+
+      <Pagination
+        count={count}
+        page={page}
+        limit={limit}
+        onPageChange={setPage}
+      />
 
       <Importer
         target="tenants"
