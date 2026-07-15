@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router";
 import { AgGridReact } from "ag-grid-react";
 import {
@@ -7,11 +8,13 @@ import {
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
+import { Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { STATUS_META, PLAN_META } from "@/pages/merchants/data";
-import { useGetTenantsQuery } from "@/api/services/tenants";
+import { tenantsApi, useGetTenantsQuery } from "@/api/services/tenants";
+import Importer from "@/components/Importer/Importer";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -67,9 +70,21 @@ function ActionCell({ data }) {
 
 export default function MerchantsPage() {
   const gridRef = useRef(null);
+  const dispatch = useDispatch();
   const [quickFilter, setQuickFilter] = useState("");
+  const [importerOpen, setImporterOpen] = useState(false);
   const { data, isLoading, isError } = useGetTenantsQuery();
   const rows = data?.results ?? [];
+
+  // Bust the tenants list cache once the wizard reports success so the grid
+  // refetches with any newly created / updated rows.
+  const handleImportDone = (logs) => {
+    dispatch(tenantsApi.util.invalidateTags([{ type: "Tenants", id: "ALL" }]));
+    const created = logs?.created ?? 0;
+    const updated = logs?.updated ?? 0;
+    const failed = logs?.failed?.length ?? 0;
+    alert(`Imported ${created} new, ${updated} updated, ${failed} failed`);
+  };
 
   const columnDefs = useMemo(
     () => [
@@ -190,6 +205,14 @@ export default function MerchantsPage() {
           onChange={onFilterTextChange}
           className="h-8 w-64 text-sm"
         />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-sm"
+          onClick={() => setImporterOpen(true)}
+        >
+          <Upload className="h-3.5 w-3.5" /> Import CSV
+        </Button>
       </div>
 
       <div
@@ -211,6 +234,13 @@ export default function MerchantsPage() {
           paginationPageSizeSelector={[10, 20, 50]}
         />
       </div>
+
+      <Importer
+        target="tenants"
+        open={importerOpen}
+        onClose={() => setImporterOpen(false)}
+        onCompleted={handleImportDone}
+      />
     </div>
   );
 }

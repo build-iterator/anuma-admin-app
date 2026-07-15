@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { useDispatch } from "react-redux";
 import { useParams, useSearchParams } from "react-router";
 import {
   ArrowDown,
@@ -20,11 +21,11 @@ import {
   getList,
   getRecords,
   getSavedViews,
-  importRecords,
   saveView,
   useListsVersion,
 } from "@/pages/lists/lib/store";
-import { applyMapping, mapHeaders, parseCSV } from "@/pages/lists/lib/csv";
+import { leadsApi } from "@/api/services/leads";
+import Importer from "@/components/Importer/Importer";
 import { CRM_SEGMENTS, dueState, matchesCrmSegment, nextStageOf, temperature } from "@/pages/lists/lib/signals";
 import { advanceStage, setOwner, setStage } from "@/pages/lists/lib/actions";
 import { FieldValue, SelectBadge, TempPill } from "@/pages/lists/components/field-cell";
@@ -362,7 +363,7 @@ export default function ListPage() {
   const [searchParams] = useSearchParams();
   const version = useListsVersion();
   const list = getList(listId);
-  const fileRef = useRef(null);
+  const dispatch = useDispatch();
 
   const openParam = searchParams.get("open");
   const [view, setView] = useState("table");
@@ -375,6 +376,7 @@ export default function ListPage() {
   const [selected, setSelected] = useState(() => new Set());
   const [naming, setNaming] = useState(false);
   const [viewName, setViewName] = useState("");
+  const [importerOpen, setImporterOpen] = useState(false);
 
   // The route component survives list-to-list navigation (same Route),
   // so lens state resets and ?open= applies via render adjustment.
@@ -395,11 +397,18 @@ export default function ListPage() {
     }
   }
 
-  const onImportFile = async (file) => {
-    if (!file || !list) return;
-    const { headers, records: rows } = parseCSV(await file.text());
-    if (!rows.length) return;
-    importRecords(list.id, applyMapping(rows, mapHeaders(headers)), `loaded from ${file.name}`);
+  // Refresh the records list after a successful backend-driven import.
+  // The wizard doesn't know about leadsApi — the parent invalidates its own
+  // slice tag so `useGetRecordsQuery(listId)` refetches on next mount.
+  const handleImportDone = (logs) => {
+    if (list?.id) {
+      dispatch(leadsApi.util.invalidateTags([{ type: "Records", id: list.id }]));
+    }
+    const created = logs?.created ?? 0;
+    const updated = logs?.updated ?? 0;
+    const failed = logs?.failed?.length ?? 0;
+    // sonner isn't wired in this project; a plain alert is intentional
+    alert(`Imported ${created} new, ${updated} updated, ${failed} failed`);
   };
 
   // `version` re-reads the store after every mutation (edit, advance, add).
@@ -494,19 +503,9 @@ export default function ListPage() {
           >
             + Add
           </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={(e) => {
-              onImportFile(e.target.files?.[0]);
-              e.target.value = "";
-            }}
-          />
           <button
-            onClick={() => fileRef.current?.click()}
-            title="Append a generated CSV to this list"
+            onClick={() => setImporterOpen(true)}
+            title="Import a CSV or Excel file into this list"
             className="flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <Upload className="h-4 w-4" /> Import CSV
@@ -720,6 +719,13 @@ export default function ListPage() {
       {adding && (
         <AddRecordModal list={list} onClose={() => setAdding(false)} onCreated={(id) => setOpenId(id)} />
       )}
+      <Importer
+        target="leads.records"
+        targetRef={listId}
+        open={importerOpen}
+        onClose={() => setImporterOpen(false)}
+        onCompleted={handleImportDone}
+      />
     </div>
   );
 }
