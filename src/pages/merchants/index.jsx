@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router";
 import { AgGridReact } from "ag-grid-react";
 import {
@@ -7,10 +8,15 @@ import {
 } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
+import { Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MERCHANTS, STATUS_META, PLAN_META } from "@/pages/merchants/data";
+import { STATUS_META, PLAN_META } from "@/pages/merchants/data";
+import { tenantsApi, useGetTenantsQuery } from "@/api/services/tenants";
+import Importer from "@/components/Importer/Importer";
+import { usePagination } from "@/hooks/usePagination";
+import { Pagination } from "@/components/Pagination";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -66,7 +72,25 @@ function ActionCell({ data }) {
 
 export default function MerchantsPage() {
   const gridRef = useRef(null);
-  const [quickFilter, setQuickFilter] = useState("");
+  const dispatch = useDispatch();
+  const [importerOpen, setImporterOpen] = useState(false);
+
+  // URL-driven pagination + search. `params` is passed to the query as-is —
+  // DRF picks up `?page`, `?limit`, `?search` server-side.
+  const { params, page, limit, search, setPage, setSearch } = usePagination();
+  const { data, isLoading, isError, isFetching } = useGetTenantsQuery(params);
+  const rows = data?.results ?? [];
+  const count = data?.count ?? 0;
+
+  // Bust the tenants list cache once the wizard reports success so the grid
+  // refetches with any newly created / updated rows.
+  const handleImportDone = (logs) => {
+    dispatch(tenantsApi.util.invalidateTags([{ type: "Tenants", id: "ALL" }]));
+    const created = logs?.created ?? 0;
+    const updated = logs?.updated ?? 0;
+    const failed = logs?.failed?.length ?? 0;
+    alert(`Imported ${created} new, ${updated} updated, ${failed} failed`);
+  };
 
   const columnDefs = useMemo(
     () => [
@@ -118,7 +142,7 @@ export default function MerchantsPage() {
         width: 120,
         type: "numericColumn",
         cellStyle: { textAlign: "right" },
-        valueFormatter: (p) => p.value.toLocaleString(),
+        valueFormatter: (p) => Number(p.value ?? 0).toLocaleString(),
       },
       {
         field: "gmv",
@@ -126,8 +150,11 @@ export default function MerchantsPage() {
         width: 130,
         type: "numericColumn",
         cellStyle: { textAlign: "right" },
+        // DRF DecimalField serializes as a string ("48200.00"); coerce.
         valueFormatter: (p) =>
-          p.value.toLocaleString("en-IN", { maximumFractionDigits: 0 }),
+          Number(p.value ?? 0).toLocaleString("en-IN", {
+            maximumFractionDigits: 0,
+          }),
       },
       {
         field: "joined_date",
@@ -158,49 +185,73 @@ export default function MerchantsPage() {
     [],
   );
 
-  const onFilterTextChange = useCallback((e) => {
-    setQuickFilter(e.target.value);
-  }, []);
-
   return (
     <div className="os-enter mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Tenants</h1>
           <p className="text-sm text-muted-foreground">
-            {MERCHANTS.length} tenants on Anuma infrastructure
+            {isLoading
+              ? "Loading tenants…"
+              : isError
+                ? "Failed to load tenants"
+                : `${count} tenants on Anuma infrastructure`}
           </p>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <Input
-          placeholder="Search tenants..."
-          value={quickFilter}
-          onChange={onFilterTextChange}
+          placeholder="Search tenants…"
+          defaultValue={search}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") setSearch(e.currentTarget.value);
+          }}
+          onBlur={(e) => {
+            if (e.currentTarget.value !== search) setSearch(e.currentTarget.value);
+          }}
           className="h-8 w-64 text-sm"
         />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-sm"
+          onClick={() => setImporterOpen(true)}
+        >
+          <Upload className="h-3.5 w-3.5" /> Import CSV
+        </Button>
       </div>
 
       <div
         className="ag-theme-quartz rounded-md border"
-        style={{ height: "calc(100vh - 220px)" }}
+        style={{ height: "calc(100vh - 260px)" }}
       >
         <AgGridReact
           ref={gridRef}
-          rowData={MERCHANTS}
+          rowData={rows}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
-          quickFilterText={quickFilter}
           rowHeight={40}
           headerHeight={38}
           animateRows
           suppressCellFocus
-          pagination
-          paginationPageSize={20}
-          paginationPageSizeSelector={[10, 20, 50]}
+          overlayLoadingTemplate={isFetching ? "Loading…" : undefined}
         />
       </div>
+
+      <Pagination
+        count={count}
+        page={page}
+        limit={limit}
+        onPageChange={setPage}
+      />
+
+      <Importer
+        target="tenants"
+        open={importerOpen}
+        onClose={() => setImporterOpen(false)}
+        onCompleted={handleImportDone}
+      />
     </div>
   );
 }
