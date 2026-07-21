@@ -40,6 +40,23 @@ import AddRecordModal from "@/pages/lists/components/add-record";
 const DEFAULT_FILTERS = {};
 const TEMP_RANK = { hot: 0, warm: 1, cold: 2 };
 
+// Fields the leads page offers a filter dropdown for, populated from whatever
+// values are actually present in the imported data (not a fixed option list
+// like `select` fields) — covers the mapper columns end to end: import a CSV,
+// get a filter for every mapped column that has data.
+const DYNAMIC_FILTER_KEYS = [
+  "company_name",
+  "website",
+  "annual_revenue_usd",
+  "product_type",
+  "industry",
+  "employees",
+  "location",
+  "market_segment",
+  "email",
+  "phone",
+];
+
 /* ── small atoms ────────────────────────────────────────────────────────── */
 
 function SortHeader({ col, sort, toggle, right, children }) {
@@ -421,6 +438,23 @@ export default function ListPage() {
   const savedViews = list ? getSavedViews(list.id) : [];
   const selectFields = (list?.fields ?? []).filter((f) => f.type === "select");
 
+  // Dynamic filters: one dropdown per mapper field, options = the distinct
+  // values actually present in this list's imported records right now.
+  const dynamicFilterFields = useMemo(() => {
+    if (!list) return [];
+    return DYNAMIC_FILTER_KEYS.map((key) => list.fields.find((f) => f.key === key))
+      .filter((f) => f && f.type !== "select")
+      .map((f) => {
+        const values = new Set();
+        records.forEach((r) => {
+          const v = r.values[f.key];
+          if (v !== undefined && v !== null && v !== "") values.add(String(v));
+        });
+        return { ...f, dynamicOptions: [...values].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) };
+      })
+      .filter((f) => f.dynamicOptions.length > 0);
+  }, [list, records]);
+
   const toggleRow = (id) =>
     setSelected((cur) => {
       const next = new Set(cur);
@@ -447,7 +481,7 @@ export default function ListPage() {
     let out = records.filter((r) => {
       if (!matchesCrmSegment(list, r, segment)) return false;
       for (const [key, v] of Object.entries(filters)) {
-        if (v && r.values[key] !== v) return false;
+        if (v && String(r.values[key] ?? "") !== v) return false;
       }
       if (!needle) return true;
       return Object.values(r.values).some((val) => String(val).toLowerCase().includes(needle));
@@ -590,6 +624,21 @@ export default function ListPage() {
             {f.options?.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.value}
+              </option>
+            ))}
+          </select>
+        ))}
+        {dynamicFilterFields.map((f) => (
+          <select
+            key={f.key}
+            value={filters[f.key] ?? ""}
+            onChange={(e) => setFilters((cur) => ({ ...cur, [f.key]: e.target.value || undefined }))}
+            className="h-8 rounded-md border bg-muted/30 px-2 text-xs text-foreground outline-none focus:bg-background focus:ring-1 focus:ring-ring"
+          >
+            <option value="">{`All ${f.label.toLowerCase()}s`}</option>
+            {f.dynamicOptions.map((o) => (
+              <option key={o} value={o}>
+                {o}
               </option>
             ))}
           </select>
