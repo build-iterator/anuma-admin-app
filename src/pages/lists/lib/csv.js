@@ -56,8 +56,14 @@ const ALIASES = {
   email: ["email", "emailaddress", "workemail", "mail"],
   phone: ["phone", "phonenumber", "mobile", "tel", "telephone", "contactnumber"],
   whatsapp: ["whatsapp", "wa", "whatsappnumber"],
+  annual_revenue_usd: ["annualrevenue", "annualrevenueusd", "revenueusd"],
+  product_type: ["producttype", "product"],
+  industry: ["industry", "sector", "vertical"],
+  employees: ["employees", "employeecount", "headcount", "noofemployees", "numberofemployees", "staff"],
+  location: ["location", "region", "geo"],
+  market_segment: ["marketsegment", "segment"],
   city: ["city", "town"],
-  state: ["state", "region", "province"],
+  state: ["state", "province"],
   owner: ["owner", "assignee", "assignedto", "rep"],
   source: ["source", "leadsource", "origin"],
   next_action: ["nextaction", "next", "nextstep", "action"],
@@ -71,7 +77,7 @@ const ALIASES = {
   date_added: ["dateadded", "added", "createdat", "created"],
 };
 
-const NUMBER_KEYS = new Set(["fit_score"]);
+const NUMBER_KEYS = new Set(["fit_score", "annual_revenue_usd", "employees"]);
 
 const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
