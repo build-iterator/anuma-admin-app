@@ -446,7 +446,14 @@ export default function ListPage() {
     const needle = q.trim().toLowerCase();
     let out = records.filter((r) => {
       if (!matchesCrmSegment(list, r, segment)) return false;
+      if (filters.revenue_min || filters.revenue_max) {
+        const revenue = Number(r.values.annual_revenue_usd);
+        if (Number.isNaN(revenue)) return false;
+        if (filters.revenue_min && revenue < Number(filters.revenue_min)) return false;
+        if (filters.revenue_max && revenue > Number(filters.revenue_max)) return false;
+      }
       for (const [key, v] of Object.entries(filters)) {
+        if (key === "revenue_min" || key === "revenue_max") continue;
         if (v && r.values[key] !== v) return false;
       }
       if (!needle) return true;
@@ -594,6 +601,25 @@ export default function ListPage() {
             ))}
           </select>
         ))}
+        <span className="flex items-center gap-1">
+          <input
+            type="number"
+            inputMode="numeric"
+            value={filters.revenue_min ?? ""}
+            onChange={(e) => setFilters((cur) => ({ ...cur, revenue_min: e.target.value || undefined }))}
+            placeholder="Min revenue"
+            className="h-8 w-28 rounded-md border bg-muted/30 px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:bg-background focus:ring-1 focus:ring-ring"
+          />
+          <span className="text-xs text-muted-foreground">–</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={filters.revenue_max ?? ""}
+            onChange={(e) => setFilters((cur) => ({ ...cur, revenue_max: e.target.value || undefined }))}
+            placeholder="Max revenue"
+            className="h-8 w-28 rounded-md border bg-muted/30 px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:bg-background focus:ring-1 focus:ring-ring"
+          />
+        </span>
         {hasLens && (
           <>
             <button

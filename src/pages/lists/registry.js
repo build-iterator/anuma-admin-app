@@ -54,6 +54,13 @@ export const CORE_FIELDS = [
   { key: "email", label: "Email", type: "email" },
   { key: "phone", label: "Phone", type: "phone" },
   { key: "whatsapp", label: "WhatsApp", type: "phone" },
+  { key: "contact_1", label: "Contact 1", type: "text" },
+  { key: "contact_1_designation", label: "Contact 1 Designation", type: "text" },
+  { key: "contact_1_email", label: "Contact 1 Email", type: "email" },
+  { key: "contact_2", label: "Contact 2", type: "text" },
+  { key: "contact_2_designation", label: "Contact 2 Designation", type: "text" },
+  { key: "contact_2_email", label: "Contact 2 Email", type: "email" },
+  { key: "annual_revenue_usd", label: "Revenue (USD)", type: "number" },
   { key: "city", label: "City", type: "text" },
   { key: "state", label: "State", type: "text" },
   { key: "owner", label: "Owner", type: "select", options: OWNERS },
@@ -61,6 +68,18 @@ export const CORE_FIELDS = [
   { key: "next_action", label: "Next action", type: "text" },
   { key: "next_action_date", label: "Next action date", type: "date" },
   { key: "notes", label: "Notes", type: "notes" },
+];
+
+// Shared condensed columns for the new contact/revenue fields — appended to
+// every list's table right before the action/owner columns, same spot in all three.
+const CONTACT_REVENUE_COLS = [
+  { kind: "field", key: "contact_1" },
+  { kind: "field", key: "contact_1_designation" },
+  { kind: "field", key: "contact_1_email" },
+  { kind: "field", key: "contact_2" },
+  { kind: "field", key: "contact_2_designation" },
+  { kind: "field", key: "contact_2_email" },
+  { kind: "field", key: "annual_revenue_usd" },
 ];
 
 function fields(extra) {
@@ -99,6 +118,7 @@ export const LISTS = [
       { kind: "field", key: "plan" },
       { kind: "field", key: "monthly_orders" },
       { kind: "reach", keys: ["phone", "whatsapp", "email"] },
+      ...CONTACT_REVENUE_COLS,
       { kind: "action" },
       { kind: "owner" },
     ],
@@ -161,6 +181,7 @@ export const LISTS = [
           { key: "years_on_indiamart", suffix: "y" },
         ],
       },
+      ...CONTACT_REVENUE_COLS,
       { kind: "action" },
       { kind: "owner" },
     ],
@@ -200,6 +221,7 @@ export const LISTS = [
       { kind: "field", key: "stage" },
       { kind: "field", key: "plan" },
       { kind: "reach", keys: ["phone", "whatsapp", "email"] },
+      ...CONTACT_REVENUE_COLS,
       { kind: "action" },
       { kind: "owner" },
     ],
