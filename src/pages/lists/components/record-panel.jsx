@@ -19,7 +19,25 @@ import {
 import { getLoggedEvents, useListsVersion, logEvent } from "@/pages/lists/lib/store";
 import { useGetRecordEventsQuery } from "@/api/services/leads";
 
-const CONTACT_KEYS = ["contact_name", "contact_role", "phone", "whatsapp", "email", "website", "indiamart_url", "shopify_domain", "city", "state", "cluster"];
+const CONTACT_KEYS = [
+  "contact_name",
+  "contact_role",
+  "phone",
+  "whatsapp",
+  "email",
+  "contact_1",
+  "contact_1_designation",
+  "contact_1_email",
+  "contact_2",
+  "contact_2_designation",
+  "contact_2_email",
+  "website",
+  "indiamart_url",
+  "shopify_domain",
+  "city",
+  "state",
+  "cluster",
+];
 
 const selectCls =
   "h-7 rounded-md border bg-muted/30 px-1.5 text-xs text-foreground outline-none focus:bg-background focus:ring-1 focus:ring-ring";
