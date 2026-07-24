@@ -59,8 +59,20 @@ export function FieldValue({ field, value }) {
           {value}
         </a>
       );
-    case "number":
-      return <span className="tabular-nums">{Number(value).toLocaleString("en-IN")}</span>;
+    case "number": {
+      let num;
+      if (typeof value === "number") {
+        num = value;
+      } else {
+        const stripped = String(value).replace(/[^0-9.-]/g, "");
+        num = stripped === "" || stripped === "-" || stripped === "." ? NaN : Number(stripped);
+      }
+      return Number.isNaN(num) ? (
+        <span className="text-muted-foreground/50">—</span>
+      ) : (
+        <span className="tabular-nums">{num.toLocaleString("en-IN")}</span>
+      );
+    }
     default:
       return <span>{String(value)}</span>;
   }

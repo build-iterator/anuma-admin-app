@@ -3,7 +3,7 @@
 // and Done / Snooze work the queue. Every change lands on the timeline.
 
 import { useMemo, useState } from "react";
-import { ArrowUpRight, Check, ChevronDown, ChevronsRight, Clock, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, ChevronsRight, Clock, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { FieldValue, TempPill } from "@/pages/lists/components/field-cell";
@@ -16,7 +16,7 @@ import {
   setTemperature,
   snooze,
 } from "@/pages/lists/lib/actions";
-import { getLoggedEvents, useListsVersion, logEvent } from "@/pages/lists/lib/store";
+import { deleteRecord, getLoggedEvents, useListsVersion, logEvent } from "@/pages/lists/lib/store";
 import { useGetRecordEventsQuery } from "@/api/services/leads";
 
 const CONTACT_KEYS = [
@@ -286,10 +286,27 @@ export default function RecordPanel({ list, record, onClose }) {
 
   const primaryLink = values.website || values.indiamart_url || values.shopify_domain;
 
+  const handleDelete = async () => {
+    if (!window.confirm(`Delete ${values.company_name || "this lead"}? This can't be undone.`)) return;
+    try {
+      await deleteRecord(list.id, record.id);
+      onClose();
+    } catch (err) {
+      alert(`Delete failed: ${err?.data?.detail || err?.error || "unknown error"}`);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-8">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
+        <button
+          onClick={handleDelete}
+          title="Delete lead"
+          className="absolute right-12 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 text-muted-foreground shadow-sm ring-1 ring-border backdrop-blur hover:text-red-600"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
         <button
           onClick={onClose}
           className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 text-muted-foreground shadow-sm ring-1 ring-border backdrop-blur hover:text-foreground"

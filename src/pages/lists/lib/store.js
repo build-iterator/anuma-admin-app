@@ -145,6 +145,12 @@ export function addRecord(listId, values) {
     .then((row) => row.id);
 }
 
+export function deleteRecord(listId, recordId) {
+  return store
+    .dispatch(leadsApi.endpoints.deleteRecord.initiate({ slug: listId, rid: recordId }))
+    .unwrap();
+}
+
 export function importRecords(listId, rows, source = "csv import") {
   return store
     .dispatch(
