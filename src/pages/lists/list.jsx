@@ -7,16 +7,19 @@ import {
   Kanban,
   Mail,
   MessageCircle,
+  Pencil,
   Phone,
   Search,
   Star,
   Table2,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
+  deleteRecord,
   deleteView,
   getList,
   getRecords,
@@ -24,7 +27,7 @@ import {
   saveView,
   useListsVersion,
 } from "@/pages/lists/lib/store";
-import { leadsApi } from "@/api/services/leads";
+import { leadsApi, useUpdateListMutation } from "@/api/services/leads";
 import Importer from "@/components/Importer/Importer";
 import { CRM_SEGMENTS, dueState, matchesCrmSegment, nextStageOf, temperature } from "@/pages/lists/lib/signals";
 import { advanceStage, setOwner, setStage } from "@/pages/lists/lib/actions";
@@ -377,6 +380,9 @@ export default function ListPage() {
   const [naming, setNaming] = useState(false);
   const [viewName, setViewName] = useState("");
   const [importerOpen, setImporterOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [updateList] = useUpdateListMutation();
 
   // The route component survives list-to-list navigation (same Route),
   // so lens state resets and ?open= applies via render adjustment.
@@ -435,8 +441,36 @@ export default function ListPage() {
       visibleRows.forEach((r) => (all ? next.delete(r.id) : next.add(r.id)));
       return next;
     });
-  const bulkApply = (fn) => {
-    records.filter((r) => selected.has(r.id)).forEach((r) => fn(r));
+  // Awaits every fan-out call so a failed PATCH surfaces instead of silently
+  // vanishing (previously fire-and-forget with no error reporting at all).
+  const bulkApply = async (fn) => {
+    const targets = records.filter((r) => selected.has(r.id));
+    const results = await Promise.allSettled(targets.map((r) => fn(r)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed > 0) alert(`${failed} of ${targets.length} update(s) failed. Please try again.`);
+  };
+
+  const bulkDelete = async () => {
+    const targets = records.filter((r) => selected.has(r.id));
+    if (targets.length === 0) return;
+    if (!window.confirm(`Delete ${targets.length} lead${targets.length > 1 ? "s" : ""}? This can't be undone.`)) {
+      return;
+    }
+    const results = await Promise.allSettled(targets.map((r) => deleteRecord(list.id, r.id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    setSelected(new Set());
+    if (failed > 0) alert(`${failed} of ${targets.length} delete(s) failed. Please try again.`);
+  };
+
+  const commitRename = async () => {
+    const name = nameDraft.trim();
+    setRenaming(false);
+    if (!name || name === list.name) return;
+    try {
+      await updateList({ slug: list.id, name }).unwrap();
+    } catch (err) {
+      alert(`Rename failed: ${err?.data?.detail || err?.error || "unknown error"}`);
+    }
   };
 
   const segmentCount = (s) => records.filter((r) => matchesCrmSegment(list, r, s.key)).length;
@@ -498,7 +532,35 @@ export default function ListPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{list.name}</h1>
+          {renaming ? (
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                if (e.key === "Escape") setRenaming(false);
+              }}
+              className="h-8 w-64 rounded-md border bg-background px-2 text-2xl font-bold tracking-tight outline-none focus:ring-1 focus:ring-ring"
+            />
+          ) : (
+            <span className="group/name flex items-center gap-1.5">
+              <h1 className="text-2xl font-bold tracking-tight">{list.name}</h1>
+              {list.custom && (
+                <button
+                  onClick={() => {
+                    setNameDraft(list.name);
+                    setRenaming(true);
+                  }}
+                  title="Rename list"
+                  className="invisible flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground group-hover/name:visible"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </span>
+          )}
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             {rows.length} of {records.length} · {list.description}
           </p>
@@ -703,6 +765,12 @@ export default function ListPage() {
                 </option>
               ))}
           </select>
+          <button
+            onClick={bulkDelete}
+            className="flex h-7 items-center gap-1 rounded-md border border-red-400/40 bg-red-500/10 px-2 text-xs font-medium text-red-200 hover:bg-red-500/20 hover:text-white"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </button>
           <button
             onClick={() => setSelected(new Set())}
             className="ml-auto text-xs text-white/60 underline-offset-4 hover:text-white hover:underline"
